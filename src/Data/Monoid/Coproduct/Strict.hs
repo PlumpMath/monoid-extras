@@ -2,11 +2,10 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE TypeOperators         #-}
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Data.Monoid.Coproduct
+-- Module      :  Data.Monoid.Coproduct.Strict
 -- Copyright   :  (c) 2015 diagrams-core team (see LICENSE)
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  diagrams-discuss@googlegroups.com
@@ -18,7 +17,7 @@
 module Data.Monoid.Coproduct.Strict
   (
     -- * Coproduct
-    (:+:)
+    Coproduct
   , inL, inR
   , prependL, prependR
   , killL, killR
@@ -51,29 +50,29 @@ instance Semigroup a => Monoid (Possible a) where
   mappend = (<>)
   {-# INLINE mappend #-}
 
--- | @m :+: n@ is the coproduct of monoids @m@ and @n@. Concatentation
+-- | @Coproduct m n@ is the coproduct of monoids @m@ and @n@. Concatentation
 --   is equivilent to
 --
 -- @
--- (m1 :+: n1) <> (m2 :+: n2) = (m1 <> m2) :+: (n1 <> act m1 n2)@
+-- (Coproduct m1 n1) <> (Coproduct m2 n2) = Coproduct (m1 <> m2) (n1 <> act m1 n2)@
 -- @
 --
 --   but has a more efficient internal implimentation.
-data m :+: n = C !(Possible n) !(Possible m) !(Possible n)
+data Coproduct m n = C !(Possible n) !(Possible m) !(Possible n)
 -- The left n already has the action m applied. The right n still needs
 -- m applied, but it kept there incase more n comes to reduce the number
 -- of actions that need to be applied.
 
-instance (Action m n, Monoid m, Monoid' n, Show m, Show n) => Show (m :+: n) where
-  showsPrec p c = showParen (p > 5) $
-    showsPrec 11 m . showString " :+: " . showsPrec 11 n
+instance (Action m n, Monoid m, Monoid' n, Show m, Show n) => Show (Coproduct m n) where
+  showsPrec p c = showParen (p > 10) $
+    showString "Coproduct" . showsPrec 11 m . showsPrec 11 n
     where (m,n) = untangle c
 
-instance (Action m n, Semigroup m, Semigroup n) => Semigroup (m :+: n) where
+instance (Action m n, Semigroup m, Semigroup n) => Semigroup (Coproduct m n) where
   C n1 m1 o1 <> C n2 m2 o2 = C (n1 <> act' m1 (o1 <> n2)) (m1 <> m2) o2
   {-# INLINE (<>) #-}
 
-instance (Action m n, Semigroup m, Semigroup n) => Monoid (m :+: n) where
+instance (Action m n, Semigroup m, Semigroup n) => Monoid (Coproduct m n) where
   mempty  = C Nought Nought Nought
   {-# INLINE mempty #-}
   mappend = (<>)
@@ -81,42 +80,42 @@ instance (Action m n, Semigroup m, Semigroup n) => Monoid (m :+: n) where
 
 -- | Coproducts act on other things by having each of the components
 --   act individually.
-instance (Action m n, Action m r, Action n r, Semigroup n) => Action (m :+: n) r where
+instance (Action m n, Action m r, Action n r, Semigroup n) => Action (Coproduct m n) r where
   act (C n m o) = act'' n' . act'' m
     where !n' = n <> act' m o
   {-# INLINE act #-}
 
 -- | Construct a coproduct with a left value.
-inL :: m -> m :+: n
+inL :: m -> Coproduct m n
 inL m = C Nought (Only m) Nought
 {-# INLINE inL #-}
 
 -- | Construct a coproduct with a right value.
-inR :: n -> m :+: n
+inR :: n -> Coproduct m n
 inR r = C (Only r) Nought Nought
 {-# INLINE inR #-}
 
 -- | Prepend a value from the left.
-prependL :: Semigroup m => m -> m :+: n -> m :+: n
+prependL :: Semigroup m => m -> Coproduct m n -> Coproduct m n
 prependL m' (C n m o) = C n (Only m' <> m) o
 {-# INLINE prependL #-}
 
 -- | Prepend a value from the right.
-prependR :: Semigroup n => n -> m :+: n -> m :+: n
+prependR :: Semigroup n => n -> Coproduct m n -> Coproduct m n
 prependR n' (C n m o) = C (Only n' <> n) m o
 {-# INLINE prependR #-}
 
 -- | Extract @m@ from a coproduct.
-killR :: Monoid m => m :+: n -> m
+killR :: Monoid m => Coproduct m n -> m
 killR (C _ m _) = get m
 {-# INLINE killR #-}
 
 -- | Extract @n@ from a coproduct.
-killL :: (Action m n, Monoid' n) => m :+: n -> n
+killL :: (Action m n, Monoid' n) => Coproduct m n -> n
 killL (C n m o) = get $ n <> act' m o
 {-# INLINE killL #-}
 
-untangle :: (Action m n, Monoid m, Monoid' n) => m :+: n -> (m,n)
+untangle :: (Action m n, Monoid m, Monoid' n) => Coproduct m n -> (m,n)
 untangle (C n m o) = (get m, get n')
   where !n' = n <> act' m o
 {-# INLINE untangle #-}
@@ -126,19 +125,19 @@ untangle (C n m o) = (get m, get n')
 type Lens s t a b = forall f. Functor f => (a -> f b) -> s -> f t
 
 -- | Lens onto the both @m@ and @n@.
-untangled :: (Action m n, Monoid m, Monoid' n) => Lens (m :+: n) (m' :+: n') (m,n) (m',n')
+untangled :: (Action m n, Monoid m, Monoid' n) => Lens (Coproduct m n) (Coproduct m' n') (m,n) (m',n')
 untangled f c = f (untangle c) <&> \(m',n') -> C (Only n') (Only m') Nought
 {-# INLINE untangled #-}
 -- this could be an iso if we depended on profunctors
 
 -- | Lens onto the left value of a coproduct.
-_L :: (Action m n, Monoid m, Semigroup n) => Lens (m :+: n) (m' :+: n) m m'
+_L :: (Action m n, Monoid m, Semigroup n) => Lens (Coproduct m n) (Coproduct m' n) m m'
 _L f (C n m o) = f (get m) <&> \m' -> C (n <> act' m o) (Only m') Nought
 {-# INLINE _L #-}
 -- this could be a prism if we depended on profunctors
 
 -- | Lens onto the right value of a coproduct.
-_R :: (Action m n, Monoid' n) => Lens (m :+: n) (m :+: n') n n'
+_R :: (Action m n, Monoid' n) => Lens (Coproduct m n) (Coproduct m n') n n'
 _R f (C n m o) = f (get $ n `mappend` act' m o) <&> \n' -> C (Only n') m Nought
 {-# INLINE _R #-}
 
